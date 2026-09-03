@@ -1,29 +1,34 @@
 const app = require('./app.js')
 const connectToDB = require('./config/db.js')
 
-// Connect to the database before accepting requests. If MongoDB is
-// unreachable (e.g. MONGODB_URI missing/wrong on Render), still start the
-// HTTP server but surface the problem clearly:
-//   - GET /api/health reports { "status": "error", "database": "disconnected" }
-//   - data queries fail fast with a clear message (bufferCommands: false)
-//     instead of queuing for 10s and returning "buffering timed out".
-async function startServer() {
-    const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
+const CONNECT_RETRY_MS = 10000; // try to (re)connect every 10s
 
-    try {
-        await connectToDB();
-    } catch (error) {
-        console.error("WARNING: could not connect to MongoDB:", error.message);
-        console.error(
-            "API will still start, but data endpoints will return errors until",
-        );
-        console.error(
-            "MONGODB_URI is set to a reachable database (e.g. MongoDB Atlas).",
-        );
-    }
+// Start the HTTP server immediately so /api/health can always report
+// database state. Then keep trying to connect to MongoDB in the background:
+//   - If MONGODB_URI is missing/wrong, the server stays up but data
+//     endpoints return a clear error (bufferCommands: false => no 10s hangs).
+//   - The instant MONGODB_URI becomes reachable, the connection succeeds
+//     without needing a service restart.
+let connecting = false;
 
-    app.listen(PORT, () => {
-        console.log(`App is running on port ${PORT}`);
-    });
+async function connectWithRetry() {
+  if (connecting) return;
+  connecting = true;
+  try {
+    await connectToDB();
+    console.log("MongoDB connected.");
+  } catch (error) {
+    console.error("Could not connect to MongoDB:", error.message);
+    console.error(`API still running, but data endpoints will error until MongoDB is reachable. Retrying in ${CONNECT_RETRY_MS / 1000}s...`);
+    setTimeout(connectWithRetry, CONNECT_RETRY_MS);
+  } finally {
+    connecting = false;
+  }
 }
-startServer();
+
+app.listen(PORT, () => {
+  console.log(`App is running on port ${PORT}`);
+});
+
+connectWithRetry();
