@@ -1,5 +1,6 @@
 // imports
 const express = require("express");
+const mongoose = require("mongoose");
 const app = express();
 const dotenv = require("dotenv").config();
 const morgan = require("morgan");
@@ -46,6 +47,16 @@ app.use(
 );
 app.use(express.json());
 app.use(morgan("dev"));
+
+// Health check — reports DB connection state (handy on Render / Netlify)
+app.get("/api/health", (req, res) => {
+  const dbState = mongoose.connection.readyState; // 0 dis, 1 con, 2 con'ing, 3 dis'ing
+  const states = ["disconnected", "connected", "connecting", "disconnecting"];
+  const ok = dbState === 1;
+  res
+    .status(ok ? 200 : 503)
+    .json({ status: ok ? "ok" : "error", database: states[dbState] || "unknown" });
+});
 
 // Routes
 app.use("/auth", authRoutes);
