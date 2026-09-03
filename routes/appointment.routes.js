@@ -1,8 +1,5 @@
 const router = require("express").Router();
-const verifyToken = require("../middleware/verifyToken");
 const c = require("../controllers/appointment.controller");
-
-router.use(verifyToken);
 
 router.get("/dashboard", c.getDashboard);
 router.get("/date/:date", c.getByDate);
