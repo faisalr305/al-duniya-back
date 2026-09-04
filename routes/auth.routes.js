@@ -7,7 +7,8 @@ router.post("/signup", authController.signUp );
 
 router.post("/sign-in",  authController.signIn);
 router.post("/login", authController.signIn);
-router.post("/logout", (req, res) => res.status(204).end());
+router.post("/refresh", authController.refresh);
+router.post("/logout", authController.logout);
 
 router.get("/me", verifyToken, authController.verifyUser);
 

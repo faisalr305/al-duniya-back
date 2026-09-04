@@ -51,7 +51,15 @@ committed — `.env` is gitignored):
 MONGODB_URI=your-reachable-connection-string
 CLIENT_URL=https://al-duniya-appointment.netlify.app
 JWT_SECRET=your-secret
+JWT_REFRESH_SECRET=a-different-long-random-secret
+NODE_ENV=production
 ```
+
+`JWT_REFRESH_SECRET` signs the HTTP-only renewal cookie. It must be different
+from `JWT_SECRET`, remain stable across deployments, and never be committed.
+Users stay signed in through automatic token renewal for 30 days by default.
+Set `REFRESH_TOKEN_TTL_DAYS` or `ACCESS_TOKEN_TTL` only if you need different
+session durations.
 
 - `MONGODB_URI` **must be reachable from the internet** — `mongodb://localhost:...`
   or `127.0.0.1` will never work on Render. Use a cloud database such as

@@ -1,6 +1,44 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+
+const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || "15m";
+const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS) || 30;
+const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const getCookie = (req, name) =>
+  (req.headers.cookie || "")
+    .split(";")
+    .map((cookie) => cookie.trim().split("="))
+    .find(([key]) => key === name)?.slice(1).join("=");
+
+const cookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/auth",
+  maxAge: REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+});
+
+const issueSession = async (user, res) => {
+  const accessToken = jwt.sign(
+    { username: user.username, _id: user._id },
+    process.env.JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_TTL },
+  );
+  const refreshToken = jwt.sign({ _id: user._id }, refreshSecret, {
+    expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d`,
+  });
+
+  user.refreshTokenHash = hashToken(refreshToken);
+  await user.save();
+  res.cookie("refreshToken", refreshToken, cookieOptions());
+  return accessToken;
+};
 
 async function signUp(req, res) {
   try {
@@ -66,13 +104,7 @@ async function signIn(req, res) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    // Construct the payload
-    const payload = { username: user.username, _id: user._id };
-
-
-    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const accessToken = await issueSession(user, res);
     return res.status(200).json({
       accessToken,
       user: {
@@ -87,6 +119,40 @@ async function signIn(req, res) {
       message: "Internal Server Error",
     });
   }
+}
+
+async function refresh(req, res) {
+  try {
+    const refreshToken = getCookie(req, "refreshToken");
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Session expired. Please sign in again." });
+    }
+
+    const payload = jwt.verify(refreshToken, refreshSecret);
+    const user = await User.findById(payload._id).select("+refreshTokenHash");
+    if (!user || !user.refreshTokenHash || user.refreshTokenHash !== hashToken(refreshToken)) {
+      return res.status(401).json({ message: "Session expired. Please sign in again." });
+    }
+
+    return res.status(200).json({ accessToken: await issueSession(user, res) });
+  } catch {
+    return res.status(401).json({ message: "Session expired. Please sign in again." });
+  }
+}
+
+async function logout(req, res) {
+  try {
+    const refreshToken = getCookie(req, "refreshToken");
+    if (refreshToken) {
+      const payload = jwt.verify(refreshToken, refreshSecret);
+      await User.findByIdAndUpdate(payload._id, { $unset: { refreshTokenHash: 1 } });
+    }
+  } catch {
+    // The client cookie may already be invalid; it still needs clearing.
+  }
+
+  res.clearCookie("refreshToken", cookieOptions());
+  return res.status(204).end();
 }
 
 async function verifyUser(req, res) {
@@ -115,5 +181,7 @@ async function verifyUser(req, res) {
 module.exports = {
   signUp,
   signIn,
+  refresh,
+  logout,
   verifyUser,
 };
