@@ -13,12 +13,13 @@ const AppointmentSchema = new mongoose.Schema(
     service: { type: String, required: true, trim: true },
     status: {
       type: String,
-      enum: ["Pending", "Confirmed", "Completed", "Cancelled", "No Show"],
-      default: "Pending",
+      enum: ["Scheduled", "Completed", "Canceled", "Pending", "Confirmed", "Cancelled", "No Show"],
+      default: "Scheduled",
     },
     totalBill: { type: Number, default: 0 },
     amountPaid: { type: Number, default: 0 },
     amountDue: { type: Number, default: 0 },
+    dueAmount: { type: Number, default: 0 },
     paymentStatus: {
       type: String,
       enum: ["Unpaid", "Partial", "Paid"],
@@ -26,6 +27,8 @@ const AppointmentSchema = new mongoose.Schema(
     },
     notes: { type: String },
     archived: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false },
+    archivedAt: { type: Date },
   },
   { timestamps: true },
 );
@@ -33,6 +36,7 @@ const AppointmentSchema = new mongoose.Schema(
 // Auto-calculate amountDue before save
 AppointmentSchema.pre("save", async function () {
   this.amountDue = Math.max(0, (this.totalBill || 0) - (this.amountPaid || 0));
+  this.dueAmount = this.amountDue;
   if (this.amountDue === 0 && this.amountPaid > 0) this.paymentStatus = "Paid";
   else if (this.amountPaid > 0) this.paymentStatus = "Partial";
   else this.paymentStatus = "Unpaid";

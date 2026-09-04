@@ -3,8 +3,11 @@ const verifyToken = require("../middleware/verifyToken");
 const authController = require('../controllers/auth.controller')
 
 router.post("/sign-up", authController.signUp );
+router.post("/signup", authController.signUp );
 
 router.post("/sign-in",  authController.signIn);
+router.post("/login", authController.signIn);
+router.post("/logout", (req, res) => res.status(204).end());
 
 router.get("/me", verifyToken, authController.verifyUser);
 

@@ -11,6 +11,7 @@ const authRoutes = require("./routes/auth.routes");
 const patientRoutes = require("./routes/patient.routes");
 const appointmentRoutes = require("./routes/appointment.routes");
 const paymentRoutes = require("./routes/payment.routes");
+const verifyToken = require("./middleware/verifyToken");
 
 // Database-ready guard. The server boots and starts listening before MongoDB
 // finishes connecting (see server.js) so /api/health is always reachable. But
@@ -83,8 +84,8 @@ app.use(async (req, res, next) => {
   }
 });
 app.use("/auth", authRoutes);
-app.use("/api/patients", patientRoutes);
-app.use("/api/appointments", appointmentRoutes);
-app.use("/api/payments", paymentRoutes);
+app.use("/api/patients", verifyToken, patientRoutes);
+app.use("/api/appointments", verifyToken, appointmentRoutes);
+app.use("/api/payments", verifyToken, paymentRoutes);
 
 module.exports = app;

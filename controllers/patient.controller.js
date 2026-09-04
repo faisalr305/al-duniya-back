@@ -62,7 +62,9 @@ exports.getPatientById = async (req, res) => {
       (s, a) => s + (a.totalBill || 0),
       0,
     );
-    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    // `amountPaid` is the authoritative running amount: it includes payments
+    // entered when the appointment was created as well as later payments.
+    const totalPaid = appointments.reduce((s, a) => s + (a.amountPaid || 0), 0);
     const totalDue = Math.max(0, totalBilled - totalPaid);
 
     const now = new Date();

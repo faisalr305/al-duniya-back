@@ -15,7 +15,7 @@ exports.createAppointment = async (req, res) => {
       service,
       totalBill,
       amountPaid,
-      notes,
+      notes, status,
     } = req.body;
 
     let patient;
@@ -47,7 +47,8 @@ exports.createAppointment = async (req, res) => {
 
     const appointment = new Appointment({
       patient: patient._id,
-      date,
+      // Keep a date-only appointment on the intended local calendar date.
+      date: new Date(`${date}T12:00:00`),
       time,
       doctor,
       service,
@@ -56,6 +57,7 @@ exports.createAppointment = async (req, res) => {
       amountDue: due,
       paymentStatus,
       notes,
+      status: status || "Scheduled",
     });
     await appointment.save();
     await appointment.populate("patient");
@@ -68,13 +70,13 @@ exports.createAppointment = async (req, res) => {
 // GET /api/appointments/date/:date — appointments for a specific day (YYYY-MM-DD)
 exports.getByDate = async (req, res) => {
   try {
-    const start = new Date(req.params.date);
-    start.setHours(0, 0, 0, 0);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.date)) return res.status(400).json({ message: "Invalid date" });
+    const start = new Date(`${req.params.date}T00:00:00`);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
     const appointments = await Appointment.find({
       date: { $gte: start, $lt: end },
-      archived: false,
+      $and: [{ archived: false }, { isArchived: { $ne: true } }],
     })
       .populate("patient")
       .sort({ time: 1 });
@@ -90,7 +92,7 @@ exports.getByRange = async (req, res) => {
     const { start, end } = req.query;
     const appointments = await Appointment.find({
       date: { $gte: new Date(start), $lte: new Date(end) },
-      archived: false,
+      $and: [{ archived: false }, { isArchived: { $ne: true } }],
     })
       .populate("patient")
       .sort({ date: 1, time: 1 });
@@ -121,30 +123,30 @@ exports.getDashboard = async (req, res) => {
       await Promise.all([
         Appointment.find({
           date: { $gte: todayStart, $lte: todayEnd },
-          archived: false,
+          archived: false, isArchived: { $ne: true },
         })
           .populate("patient")
           .sort({ time: 1 }),
         Appointment.find({
           date: { $gte: tomorrowStart, $lte: tomorrowEnd },
-          archived: false,
+          archived: false, isArchived: { $ne: true },
         })
           .populate("patient")
           .sort({ time: 1 }),
         Appointment.find({
           date: { $gt: tomorrowEnd, $lte: weekEnd },
-          archived: false,
+          archived: false, isArchived: { $ne: true },
         })
           .populate("patient")
           .sort({ date: 1, time: 1 }),
         Appointment.find({
           date: { $gte: pastStart, $lt: todayStart },
-          archived: false,
+          archived: false, isArchived: { $ne: true },
         })
           .populate("patient")
           .sort({ date: -1 })
           .limit(10),
-        Appointment.find({ archived: false }),
+        Appointment.find({ archived: false, isArchived: { $ne: true } }),
         Payment.find({ date: { $gte: todayStart, $lte: todayEnd } }),
       ]);
 
@@ -182,7 +184,7 @@ exports.getAllAppointments = async (req, res) => {
       endDate,
       search,
     } = req.query;
-    const filter = {};
+    const filter = { archived: false, isArchived: { $ne: true } };
     if (patient) filter.patient = patient;
     if (doctor) filter.doctor = new RegExp(doctor, "i");
     if (service) filter.service = new RegExp(service, "i");
@@ -225,6 +227,18 @@ exports.getById = async (req, res) => {
   }
 };
 
+// GET /api/appointments/patient/:patientId — deliberately includes archived history.
+exports.getByPatient = async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.patientId);
+    if (!patient) return res.status(404).json({ message: "Patient not found" });
+    const appointments = await Appointment.find({ patient: patient._id }).populate("patient").sort({ date: -1, time: -1 });
+    res.json(appointments);
+  } catch (err) {
+    res.status(400).json({ message: "Invalid patient ID" });
+  }
+};
+
 // PUT /api/appointments/:id — update appointment
 exports.updateAppointment = async (req, res) => {
   try {
@@ -241,6 +255,7 @@ exports.updateAppointment = async (req, res) => {
           ? Number(updates.amountPaid)
           : current.amountPaid;
       updates.amountDue = Math.max(0, bill - paid);
+      updates.dueAmount = updates.amountDue;
       updates.paymentStatus =
         updates.amountDue === 0 && paid > 0
           ? "Paid"
@@ -264,11 +279,12 @@ exports.updateAppointment = async (req, res) => {
 // DELETE /api/appointments/:id — soft archive
 exports.archiveAppointment = async (req, res) => {
   try {
-    const appointment = await Appointment.findByIdAndUpdate(
-      req.params.id,
-      { archived: true },
-      { new: true },
-    );
+    const current = await Appointment.findById(req.params.id);
+    if (!current) return res.status(404).json({ message: "Not found" });
+    if (["Scheduled", "Pending", "Confirmed"].includes(current.status)) {
+      return res.status(400).json({ message: "Scheduled appointments cannot be deleted. Complete or cancel the appointment first." });
+    }
+    const appointment = await Appointment.findByIdAndUpdate(req.params.id, { archived: true, isArchived: true, archivedAt: new Date() }, { new: true });
     if (!appointment) return res.status(404).json({ message: "Not found" });
     res.json({ message: "Appointment archived", appointment });
   } catch (err) {

@@ -4,14 +4,17 @@ const jwt = require("jsonwebtoken");
 
 async function signUp(req, res) {
   try {
-    const { username, password } = req.body;
+    const { username, email, fullName, password } = req.body;
+    const identity = (email || username || "").toLowerCase().trim();
 
     // Validation
-    if (!username || !password) return res.status(400).json({message: "Username and password are required.",});
-    if (password.length < 6) return res.status(400).json({message: "Password must be more than 6 characters",});
+    if (!identity || !password) return res.status(400).json({message: email ? "Email and password are required." : "Username and password are required.",});
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ message: "Enter a valid email address." });
+    if (password.length < 8) return res.status(400).json({message: "Password must be at least 8 characters.",});
 
     const user = await User.create({
-      username,
+      username: identity,
+      fullName: fullName?.trim(),
       hashedPassword: await bcrypt.hash(password, 12),
     });
 
@@ -42,14 +45,15 @@ async function signUp(req, res) {
 
 async function signIn(req, res) {
   try {
-    const { username, password } = req.body;
+    const { username, email, password } = req.body;
+    const identity = (email || username || "").toLowerCase().trim();
 
-    if (!username || !password) {
+    if (!identity || !password) {
       return res.status(400).json({
         message: "Username and password are required.",
       });
     }
-    const user = await User.findOne({ username:username.toLowerCase().trim() });
+    const user = await User.findOne({ username: identity });
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
@@ -73,7 +77,7 @@ async function signIn(req, res) {
       accessToken,
       user: {
         _id: user._id,
-        username: user.username,
+        username: user.username, fullName: user.fullName,
       },
     });
   } catch (err) {
@@ -97,7 +101,7 @@ async function verifyUser(req, res) {
 
     return res.status(200).json({
         _id: user._id,
-        username: user.username,
+        username: user.username, fullName: user.fullName,
     });
   } catch (err) {
     console.error(err);
