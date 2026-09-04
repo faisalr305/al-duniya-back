@@ -53,7 +53,7 @@ const app = require("./app");
     service: "Checkup",
     totalBill: 100,
   });
-  console.log("[9] rebook creates+restores ->", appt.status,, Boolean(appt.body.patient), appt.body.patient);
+  console.log("[9] rebook creates+restores ->", appt.status, !!appt.body.patient, appt.body.patient);
   const l4 = await request(app).get("/api/patients");
   console.log("[10] list after rebook ->", l4.status, l4.body.some((p) => p._id === id && !p.archived));
 
