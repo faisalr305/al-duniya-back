@@ -20,6 +20,10 @@ async function connectWithRetry() {
     console.log("MongoDB connected.");
   } catch (error) {
     console.error("Could not connect to MongoDB:", error.message);
+    // Surface the underlying failure (e.g. Atlas IP-allowlist / auth / DNS),
+    // not just the generic server-selection message.
+    const cause = error.cause?.message || error.reason?.message || error.reason;
+    if (cause) console.error("Reason:", cause);
     console.error(`API still running, but data endpoints will error until MongoDB is reachable. Retrying in ${CONNECT_RETRY_MS / 1000}s...`);
     setTimeout(connectWithRetry, CONNECT_RETRY_MS);
   } finally {

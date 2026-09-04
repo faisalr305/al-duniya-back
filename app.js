@@ -12,6 +12,17 @@ const patientRoutes = require("./routes/patient.routes");
 const appointmentRoutes = require("./routes/appointment.routes");
 const paymentRoutes = require("./routes/payment.routes");
 
+// Database-ready guard. The server boots and starts listening before MongoDB
+// finishes connecting (see server.js) so /api/health is always reachable. But
+// with `bufferCommands: false`, any model call made before the *initial* Mongo
+// connection completes rejects with Mongoose's
+// "Cannot call X before initial connection is complete if bufferCommands = false".
+// This middleware waits for the connection instead (so requests arriving during
+// a Render cold-start just succeed a moment later) and returns a clean 503
+// rather than a raw 500/400 when the database genuinely isn't reachable.
+const { waitForDatabase } = require("./config/db");
+const DB_WAIT_TIMEOUT_MS = Number(process.env.DB_WAIT_TIMEOUT_MS) || 10000;
+
 // Middleware — CORS
 // The deployed frontend is hosted on Netlify while this API runs on Render,
 // so the production origin is allow-listed by default (independent of env vars).
@@ -59,6 +70,18 @@ app.get("/api/health", (req, res) => {
 });
 
 // Routes
+app.use(async (req, res, next) => {
+  try {
+    await waitForDatabase(DB_WAIT_TIMEOUT_MS);
+    next();
+  } catch {
+    res.status(503).json({
+      status: "error",
+      message:
+        "Database is not connected yet. Check /api/health and confirm MONGODB_URI is reachable.",
+    });
+  }
+});
 app.use("/auth", authRoutes);
 app.use("/api/patients", patientRoutes);
 app.use("/api/appointments", appointmentRoutes);
