@@ -6,13 +6,20 @@ const Payment = require("../models/Payment");
 exports.createPatient = async (req, res) => {
   try {
     const existing = await Patient.findOne({ phone: req.body.phone });
-    if (existing)
+    if (existing) {
+      // Re-created: restore a previously-deleted patient and merge in the fresh details
+      if (existing.archived) {
+        existing.set({ ...req.body, archived: false });
+        await existing.save();
+        return res.status(200).json({ message: "Patient restored", patient: existing });
+      }
       return res
         .status(409)
         .json({
           message: "Patient with this phone already exists",
           patient: existing,
         });
+    }
     const patient = await Patient.create(req.body);
     res.status(201).json(patient);
   } catch (err) {
@@ -26,6 +33,7 @@ exports.searchPatients = async (req, res) => {
     const q = req.query.q || "";
     const regex = new RegExp(q, "i");
     const patients = await Patient.find({
+      archived: false,
       $or: [{ name: regex }, { phone: regex }],
     })
       .limit(10)
@@ -40,7 +48,8 @@ exports.searchPatients = async (req, res) => {
 exports.getPatientById = async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id);
-    if (!patient) return res.status(404).json({ message: "Patient not found" });
+    if (!patient || patient.archived)
+      return res.status(404).json({ message: "Patient not found" });
 
     const appointments = await Appointment.find({ patient: patient._id }).sort({
       date: -1,
@@ -78,7 +87,7 @@ exports.getPatientById = async (req, res) => {
 // GET /api/patients — list all patients
 exports.getAllPatients = async (req, res) => {
   try {
-    const patients = await Patient.find().sort({ name: 1 });
+    const patients = await Patient.find({ archived: false }).sort({ name: 1 });
     res.json(patients);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -96,5 +105,21 @@ exports.updatePatient = async (req, res) => {
     res.json(patient);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+};
+
+// DELETE /api/patients/:id — soft delete (archive) a patient so their
+// appointment/payment history stays intact.
+exports.deletePatient = async (req, res) => {
+  try {
+    const patient = await Patient.findByIdAndUpdate(
+      req.params.id,
+      { archived: true },
+      { new: true },
+    );
+    if (!patient) return res.status(404).json({ message: "Patient not found" });
+    res.json({ message: "Patient deleted", patient });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

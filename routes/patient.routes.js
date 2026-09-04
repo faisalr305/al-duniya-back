@@ -6,5 +6,6 @@ router.get("/", c.getAllPatients);
 router.post("/", c.createPatient);
 router.get("/:id", c.getPatientById);
 router.put("/:id", c.updatePatient);
+router.delete("/:id", c.deletePatient);
 
 module.exports = router;

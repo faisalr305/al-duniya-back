@@ -31,6 +31,11 @@ exports.createAppointment = async (req, res) => {
           name: patientName,
           phone: patientPhone,
         });
+      } else if (patient.archived) {
+        // Rebooking a deleted patient by phone brings them back.
+
+        patient.archived = false;
+        await patient.save();
       }
     }
 

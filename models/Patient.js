@@ -9,6 +9,7 @@ const PatientSchema = new mongoose.Schema(
     gender: { type: String, enum: ["Male", "Female", "Other"] },
     address: { type: String },
     notes: { type: String },
+    archived: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
