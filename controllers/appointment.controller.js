@@ -1,6 +1,17 @@
 const Appointment = require("../models/Appointment");
 const Patient = require("../models/Patient");
 const Payment = require("../models/Payment");
+const Doctor = require("../models/Doctor");
+
+// Keep the doctor dropdown up to date whenever an appointment is created or
+// edited with a doctor name. Non-fatal if it fails (booking still succeeds).
+const syncDoctorName = async (name) => {
+  try {
+    await Doctor.ensureName(name);
+  } catch (e) {
+    console.error("Doctor sync skipped:", e.message);
+  }
+};
 
 // POST /api/appointments — create appointment (auto-create patient if new)
 exports.createAppointment = async (req, res) => {
@@ -61,6 +72,7 @@ exports.createAppointment = async (req, res) => {
     });
     await appointment.save();
     await appointment.populate("patient");
+    await syncDoctorName(appointment.doctor);
     res.status(201).json(appointment);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -270,6 +282,7 @@ exports.updateAppointment = async (req, res) => {
     ).populate("patient");
     if (!appointment)
       return res.status(404).json({ message: "Appointment not found" });
+    if (updates.doctor) await syncDoctorName(updates.doctor);
     res.json(appointment);
   } catch (err) {
     res.status(400).json({ message: err.message });

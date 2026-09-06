@@ -11,6 +11,7 @@ const authRoutes = require("./routes/auth.routes");
 const patientRoutes = require("./routes/patient.routes");
 const appointmentRoutes = require("./routes/appointment.routes");
 const paymentRoutes = require("./routes/payment.routes");
+const doctorRoutes = require("./routes/doctor.routes");
 const verifyToken = require("./middleware/verifyToken");
 
 // Database-ready guard. The server boots and starts listening before MongoDB
@@ -87,5 +88,6 @@ app.use("/auth", authRoutes);
 app.use("/api/patients", verifyToken, patientRoutes);
 app.use("/api/appointments", verifyToken, appointmentRoutes);
 app.use("/api/payments", verifyToken, paymentRoutes);
+app.use("/api/doctors", verifyToken, doctorRoutes);
 
 module.exports = app;
