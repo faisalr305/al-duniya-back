@@ -6,12 +6,16 @@ const app = require("../app");
 
 const User = require("../models/User");
 const Doctor = require("../models/Doctor");
+const Patient = require("../models/Patient");
+const Appointment = require("../models/Appointment");
 
 beforeAll(async () => {
   await mongoose.connect(process.env.MONGODB_URI);
 });
 
 afterEach(async () => {
+  await Appointment.deleteMany({});
+  await Patient.deleteMany({});
   await Doctor.deleteMany({});
   await User.deleteMany({});
 });
@@ -92,6 +96,29 @@ describe("Doctor Routes", () => {
 
       expect(res.statusCode).toBe(400);
       expect(res.body.message).toBe("Doctor name is required");
+    });
+  });
+
+  describe("PUT and DELETE /api/doctors/:id", () => {
+    test("renames a doctor and updates their appointments", async () => {
+      const token = await signInToken();
+      const doctor = await Doctor.create({ name: "Dr. Before" });
+      const patient = await Patient.create({ name: "Test Patient", phone: "+123456789" });
+      await Appointment.create({ patient: patient._id, date: new Date(), time: "10:00", doctor: "Dr. Before", service: "Consultation" });
+
+      const res = await request(app).put(`/api/doctors/${doctor._id}`).set("Authorization", `Bearer ${token}`).send({ name: "Dr. After" });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.name).toBe("Dr. After");
+      expect((await Appointment.findOne()).doctor).toBe("Dr. After");
+    });
+
+    test("removes a doctor from the active dropdown", async () => {
+      const token = await signInToken();
+      const doctor = await Doctor.create({ name: "Dr. Retired" });
+      const res = await request(app).delete(`/api/doctors/${doctor._id}`).set("Authorization", `Bearer ${token}`);
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isActive).toBe(false);
+      expect((await request(app).get("/api/doctors").set("Authorization", `Bearer ${token}`)).body).toEqual([]);
     });
   });
 });
